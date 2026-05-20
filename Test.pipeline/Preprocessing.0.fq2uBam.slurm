@@ -141,8 +141,8 @@ gatk FastqToSam \
 ############################################################
 ## Validate uBAM
 ############################################################
-
-samtools quickcheck "${out_bam}"
+samtools view -H "${out_bam}" | grep '^@RG'
+samtools view "${out_bam}" | head -n 1 > /dev/null
 
 ############################################################
 ## Clean temporary files
