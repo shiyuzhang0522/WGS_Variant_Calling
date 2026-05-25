@@ -3,6 +3,9 @@
 This directory contains step-by-step SLURM scripts used to validate the GATK
 Best Practices commands before they were converted into the WDL workflow.
 
+The scripts implement a per-sample germline WGS pipeline from paired-end FASTQ
+files to GVCF generation.
+
 These scripts are useful as command references, but they are not fully portable:
 they contain cluster-specific partitions, Conda paths, sample paths, reference
 paths, and output directories.
@@ -34,3 +37,9 @@ Before submitting a script on a different system, update:
 
 See the root `README.md` for runtime, memory, and output-size benchmarks from
 the validation sample.
+
+## Platform Notice
+The dataset was generated from approximately **30× whole-genome
+sequencing** on the **BGI DNBSEQ-T7 platform**. When applying the pipeline to data
+generated from other sequencing platforms, certain parameters and resource
+settings may require adjustment.
