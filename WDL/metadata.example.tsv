@@ -1,0 +1,2 @@
+sample_name	fq1	fq2	read_group_id	library_name	platform_unit	platform_name	sequencing_center
+MEL100	/path/to/MEL100_R1.fastq.gz	/path/to/MEL100_R2.fastq.gz	E250058805_L01_WGS2510043608-2-8074	MEL100_lib	E250058805_L01	DNBSEQ	XYCM

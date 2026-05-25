@@ -1,88 +1,75 @@
 #!/usr/bin/env python3
+"""Build per-sample WDL input JSON files for the germline WGS pipeline.
 
-###############################################################################
-# build_wdl_inputs.py
-#
-# PURPOSE
-# -------
-# Generate per-sample WDL input JSON files for the
-# XYCM germline whole-genome sequencing (WGS) FASTQ-to-GVCF pipeline.
-#
-# OVERVIEW
-# --------
-# This script:
-#
-#   1. Reads the master sample metadata table:
-#        XYCM_WGS_sample_metadata.tsv
-#
-#   2. Validates:
-#        - FASTQ files
-#        - reference bundle files
-#        - BWA-MEM2 index files
-#        - known-sites resources for BQSR
-#
-#   3. Builds one input JSON per sequencing unit (sample_uid),
-#      where:
-#
-#        sample_uid = sample_name + "__" + read_group_id
-#
-#      Example:
-#        MEL100__E250058805_L01_WGS2510043608-2-8074
-#
-#   4. Generates a manifest table summarizing all WDL input JSONs.
-#
-#
-# DESIGN PRINCIPLES
-# -----------------
-# - Reproducible
-# - Robust
-# - Per-RG/sample-unit granularity
-# - Compatible with Cromwell/WDL execution
-# - Aligned with Broad GATK germline best practices
-# - Suitable for large-scale production WGS processing
-#
-#
-# OUTPUTS
-# -------
-# Per-sample JSON:
-#
-#   WDL/inputs/<sample_uid>.inputs.json
-#
-# Manifest:
-#
-#   WDL/inputs/wdl_inputs_manifest.tsv
-#
-#
-# EXAMPLE
-# -------
-# python build_wdl_inputs.py \
-#   --metadata XYCM_WGS_sample_metadata.tsv \
-#   --ref-dir /path/to/GATK.hg38 \
-#   --out-dir WDL/inputs
-#
-###############################################################################
+The metadata table should contain one row per sequencing unit or read group.
+Each row becomes one Cromwell input JSON named:
+
+    WDL/inputs/<sample_name>__<read_group_id>.inputs.json
+
+The script validates FASTQ paths, reference bundle files, BWA-MEM2 index files,
+and BQSR known-sites resources before writing outputs.
+"""
 
 import argparse
 import json
 import os
 import re
 from pathlib import Path
+from typing import Dict
 
 import pandas as pd
 
 
+REQUIRED_METADATA_COLUMNS = [
+    "sample_name",
+    "fq1",
+    "fq2",
+    "read_group_id",
+    "library_name",
+    "platform_unit",
+    "platform_name",
+    "sequencing_center",
+]
+
+
 def sanitize_id(x: str) -> str:
+    """Return a filesystem- and WDL-friendly identifier."""
     x = str(x).strip()
     x = re.sub(r"[^A-Za-z0-9_.-]+", "_", x)
     return x
 
 
 def require_file(path: str, label: str) -> str:
+    """Validate an input file and return its absolute path."""
     if not path:
         raise ValueError(f"Missing path for {label}")
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Missing {label}: {path}")
     return os.path.abspath(path)
+
+
+def reference_resources(ref_dir: Path) -> Dict[str, Path]:
+    """Return the hg38 reference bundle paths required by the WDL."""
+    ref_fasta = ref_dir / "Homo_sapiens_assembly38.fasta"
+
+    return {
+        "ref_fasta": ref_fasta,
+        "ref_fasta_index": ref_dir / "Homo_sapiens_assembly38.fasta.fai",
+        "ref_dict": ref_dir / "Homo_sapiens_assembly38.dict",
+        "ref_0123": Path(str(ref_fasta) + ".0123"),
+        "ref_amb": Path(str(ref_fasta) + ".amb"),
+        "ref_ann": Path(str(ref_fasta) + ".ann"),
+        "ref_bwt2bit64": Path(str(ref_fasta) + ".bwt.2bit.64"),
+        "ref_pac": Path(str(ref_fasta) + ".pac"),
+        "dbsnp_vcf": ref_dir / "Homo_sapiens_assembly38.dbsnp138.vcf",
+        "dbsnp_vcf_index": ref_dir / "Homo_sapiens_assembly38.dbsnp138.vcf.idx",
+        "mills_vcf": ref_dir / "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+        "mills_vcf_index": ref_dir
+        / "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi",
+        "known_indels_vcf": ref_dir / "Homo_sapiens_assembly38.known_indels.vcf.gz",
+        "known_indels_vcf_index": ref_dir
+        / "Homo_sapiens_assembly38.known_indels.vcf.gz.tbi",
+    }
 
 
 def main():
@@ -144,46 +131,13 @@ def main():
     if not ref_dir.is_dir():
         raise FileNotFoundError(f"Missing reference directory: {ref_dir}")
 
-    ref_fasta = ref_dir / "Homo_sapiens_assembly38.fasta"
-
-    resources = {
-        "ref_fasta": ref_fasta,
-        "ref_fasta_index": ref_dir / "Homo_sapiens_assembly38.fasta.fai",
-        "ref_dict": ref_dir / "Homo_sapiens_assembly38.dict",
-
-        "ref_0123": Path(str(ref_fasta) + ".0123"),
-        "ref_amb": Path(str(ref_fasta) + ".amb"),
-        "ref_ann": Path(str(ref_fasta) + ".ann"),
-        "ref_bwt2bit64": Path(str(ref_fasta) + ".bwt.2bit.64"),
-        "ref_pac": Path(str(ref_fasta) + ".pac"),
-
-        "dbsnp_vcf": ref_dir / "Homo_sapiens_assembly38.dbsnp138.vcf",
-        "dbsnp_vcf_index": ref_dir / "Homo_sapiens_assembly38.dbsnp138.vcf.idx",
-
-        "mills_vcf": ref_dir / "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
-        "mills_vcf_index": ref_dir / "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi",
-
-        "known_indels_vcf": ref_dir / "Homo_sapiens_assembly38.known_indels.vcf.gz",
-        "known_indels_vcf_index": ref_dir / "Homo_sapiens_assembly38.known_indels.vcf.gz.tbi",
-    }
-
+    resources = reference_resources(ref_dir)
     for label, path in resources.items():
         require_file(str(path), label)
 
     df = pd.read_csv(metadata, sep="\t", dtype=str).fillna("")
 
-    required_cols = [
-        "sample_name",
-        "fq1",
-        "fq2",
-        "read_group_id",
-        "library_name",
-        "platform_unit",
-        "platform_name",
-        "sequencing_center",
-    ]
-
-    missing_cols = [c for c in required_cols if c not in df.columns]
+    missing_cols = [c for c in REQUIRED_METADATA_COLUMNS if c not in df.columns]
     if missing_cols:
         raise ValueError(f"Metadata is missing columns: {missing_cols}")
 
@@ -258,9 +212,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# Usage
-# python build_wdl_inputs.py \
-#  --metadata XYCM_WGS_sample_metadata.tsv \
-#  --ref-dir /lustre/home/zhangsy/Project_XYCM_WGS/0.Variant.Calling/Resource.bundle/GATK.hg38 \
-#  --out-dir WDL/inputs
