@@ -49,6 +49,32 @@ The workflow expects these tools to be available in the runtime environment:
 The validation scripts in `Test.pipeline/` are written for SLURM and assume a
 Conda environment named `gatk_germline`.
 
+## Benchmark
+
+The following benchmark was collected from one validation sample:
+
+```text
+MEL100.E250058805_L01_WGS2510043608-2-8074
+```
+
+These values are intended for cluster planning and rough runtime estimates.
+Actual runtime and memory use will vary with sample coverage, FASTQ size,
+filesystem performance, scheduler configuration, and available CPU resources.
+
+| Step | Script / task | Purpose | Threads | Elapsed time | JVM total memory | Main output |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| 0 | `Step0.FastqToSam.test.slurm` | FASTQ to uBAM | - | 76 min | 889192448 bytes | `*.unmapped.bam` (43 GB) |
+| 1 | `Step1.SamToFastqAndBwaMem.test.slurm.sh` | Map to reference | 16 | 130.33 min | 1224736768 bytes | `*.unmerged.bam` (59 GB) |
+| 2 | `Preprocessing.Step2.MergeBamAlignment.test.sh` | Merge aligned BAM with uBAM metadata | - | 123.55 min | 4294967296 bytes | `*.aligned.unsorted.bam` (58 GB) |
+| 3 | `Preprocessing.Step3.MarkDuplicatesSpark.test.sh` | Mark duplicates and sort BAM | 16 | 659.78 min | 8589934592 bytes | `*.aligned.duplicates_marked.sorted.bam` (35 GB) |
+| 4 | `Step4.SetNmMdAndUqTags.test.sh` | Refresh NM, MD, and UQ tags | - | 80.93 min | 4294967296 bytes | `*.aligned.duplicates_marked.sorted.fixed.bam` (30 GB) |
+| 5 | `Step5.BaseRecalibrator.test.sh` | Build BQSR recalibration table | - | 192.06 min | 4294967296 bytes | `*.recal_data.csv` |
+| 6 | `Step6.ApplyBQSR.test.sh` | Apply BQSR to BAM | - | 211.37 min | 4294967296 bytes | `*.aligned.duplicates_marked.recalibrated.bam` (66 GB) |
+| 7 | `VariantCalling.Step1.HaplotypeCaller.GVCF.test.sh` | Call variants in GVCF mode | 16 | 933.18 min | 42949672960 bytes | `*.g.vcf.gz` (5.3 GB) |
+
+Overall per-sample runtime was approximately 40 hours, finishing within two
+days. The maximum JVM total memory observed was 40 GB during HaplotypeCaller.
+
 ## Reference Bundle
 
 `WDL/build_wdl_inputs.py` expects a GATK hg38 reference directory containing:
@@ -155,3 +181,7 @@ entry points.
 
 Use the WDL workflow for routine execution, and use the SLURM scripts when you
 need to inspect or rerun a single validated command by hand.
+
+## Contact
+
+For questions or feedback, contact: shiyuzhang0522@gmail.com

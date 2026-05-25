@@ -31,3 +31,6 @@ Before submitting a script on a different system, update:
 - Conda activation path and environment name
 - input, output, metadata, and reference paths
 - CPU and memory settings
+
+See the root `README.md` for runtime, memory, and output-size benchmarks from
+the validation sample.
