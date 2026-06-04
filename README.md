@@ -14,10 +14,22 @@ base quality score recalibration, and GATK HaplotypeCaller in GVCF mode.
 |   +-- build_wdl_inputs.py         # Builds per-sample Cromwell input JSONs
 |   +-- metadata.example.tsv        # Minimal metadata template
 |   +-- README.md                   # WDL-specific usage notes
+|   +-- CSU-HPC-pipeline/           # CSU-HPC-specific workflow, metadata, and SLURM wrappers
 +-- Test.pipeline/                  # SLURM scripts used to validate each step
 +-- LICENSE
 +-- README.md
 ```
+
+There are two FASTQ-to-GVCF entry points:
+
+- `FASTQ2GVCF-WDL/`: portable WDL workflow and generic Cromwell input builder.
+- `FASTQ2GVCF-WDL/CSU-HPC-pipeline/`: CSU-HPC deployment files with absolute
+  paths, SLURM settings, metadata discovery for XYCM WGS FASTQs, and Cromwell
+  array-job wrappers.
+
+Use the portable files when adapting the workflow to a new environment. Use the
+CSU-HPC files when running the established production workflow on the CSU-HPC
+cluster.
 
 ## Workflow Summary
 
@@ -62,6 +74,9 @@ MEL100.E250058805_L01_WGS2510043608-2-8074
 These values are intended for cluster planning and rough runtime estimates.
 Actual runtime and memory use will vary with sample coverage, FASTQ size,
 filesystem performance, scheduler configuration, and available CPU resources.
+When running samples in batches, the `Step0.FastqToSam.test.slurm` runtime may
+double or triple because multiple jobs read large FASTQ files from shared
+storage at the same time.
 
 | Step | Script / task | Purpose | Threads | Elapsed time | JVM total memory | Main output |
 | --- | --- | --- | ---: | ---: | ---: | --- |
@@ -175,6 +190,43 @@ Final outputs include:
 - duplicate metrics
 - BQSR recalibration report
 - per-step GATK logs and `/usr/bin/time -v` logs
+
+## CSU-HPC Production Pipeline
+
+`FASTQ2GVCF-WDL/CSU-HPC-pipeline/` contains the CSU-HPC-specific production
+version of the same workflow. These files are intentionally site-specific and
+include paths under `/public/home/hpc8301200407` and `/nfs8301200407`.
+
+Main files:
+
+- `Create_XYCM_WGS_sample_metadata.sh`: scans configured FASTQ directories and
+  writes the XYCM WGS metadata TSV.
+- `CSU-HPC-build_wdl_inputs.py`: builds per-sample Cromwell input JSONs using
+  CSU-HPC default paths and resource settings.
+- `XYCM_Germline_GVCF.v1.0.wdl`: WDL version used for CSU-HPC production runs.
+- `CSU-HPC-submit.all_samples.cromwell.slurm.sh`: submits one input JSON per
+  SLURM array task and writes final GVCF outputs plus status files.
+- `CSU-HPC-submit.all_samples.cromwell.slurm.fixed.v2.0.sh`: newer fixed SLURM
+  wrapper that also cleans execution GVCF/TBI copies after a successful run.
+- `Submit_selected_to_idle_nodes.sh`: submits a selected task range only to
+  currently idle `cpuQ` nodes after a confirmation prompt.
+
+Typical CSU-HPC order of operations:
+
+```bash
+cd FASTQ2GVCF-WDL/CSU-HPC-pipeline
+
+bash Create_XYCM_WGS_sample_metadata.sh
+python CSU-HPC-build_wdl_inputs.py
+
+sbatch --array=1-<N> CSU-HPC-submit.all_samples.cromwell.slurm.fixed.v2.0.sh
+```
+
+For targeted resubmission to idle nodes:
+
+```bash
+bash Submit_selected_to_idle_nodes.sh <start_task> <end_task> [exclude_task_id]
+```
 
 ## Validation SLURM Scripts
 
